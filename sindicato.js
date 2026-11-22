@@ -465,6 +465,14 @@ function render(data) {
     change.finish();
     return;
   }
+  if (data.noMembership) {
+    const notice=element('section','',panel);
+    element('h1','Hola, '+data.name,notice);
+    element('p','Esta cuenta todavía no tiene una afiliación activa a un sindicato. Solicita a Presidencia o a Admin Mi Sindicato que revise su asignación.',notice);
+    const admin=element('button','Acceder a administración general',notice);
+    admin.onclick=()=>navigate('/admin');
+    return;
+  }
 
   document.body.classList.toggle('admin-dashboard', Boolean(data.active));
   if (!data.active) {

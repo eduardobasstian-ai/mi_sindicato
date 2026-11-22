@@ -8,13 +8,21 @@ Deno.serve(async req => {
  try {
  const db=createClient(Deno.env.get("SUPABASE_URL")!,Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,{auth:{persistSession:false}});
  const body = await req.json();
- if(body.route==="login"){
+ if(body.route==="login"||body.route==="admin/login"){
    const identifier=String(body.input?.username||"").replace(/[.\-\s]/g,"");
    if(!/^\d{7,9}$/.test(identifier) && !String(body.input?.username).includes("@")) return reply({error:"Ingresa el RUT sin dígito verificador."},400);
-   const lookup=db.from("profiles").select("email"); const {data:p}=await (String(body.input.username).includes("@")?lookup.eq("email",String(body.input.username).toLowerCase()):lookup.or("username.eq."+identifier+",rut.eq."+identifier)).single();
-   if(!p) return reply({error:"Usuario o clave incorrectos."},401);
+   let p;
+   if(body.route==="admin/login"){
+    const {data:admins,error:lookupError}=await db.rpc("portal_admin_identity",{identifier:String(body.input.username).includes("@")?String(body.input.username).trim():identifier});check(lookupError);
+    p=admins?.[0];
+   }else{
+    const lookup=db.from("profiles").select("email,auth_email,active");
+    const {data:member}=await (String(body.input.username).includes("@")?lookup.eq("email",String(body.input.username).toLowerCase()):lookup.or("username.eq."+identifier+",rut.eq."+identifier)).single();
+    p=member;
+   }
+   if(!p?.active) return reply({error:"Usuario o clave incorrectos."},401);
    const login=createClient(Deno.env.get("SUPABASE_URL")!,Deno.env.get("SUPABASE_ANON_KEY")!,{auth:{persistSession:false}});
-   const {data,error}=await login.auth.signInWithPassword({email:p.email,password:body.input.password});
+   const {data,error}=await login.auth.signInWithPassword({email:p.auth_email||p.email,password:body.input.password});
    if(error) return reply({error:"Usuario o clave incorrectos."},401);
    if(body.input.slug){
      const {data:affiliations,error:affiliationError}=await db.from("memberships").select("union_id,unions!inner(slug,active)").eq("user_id",data.user.id).eq("active",true).eq("unions.slug",body.input.slug).eq("unions.active",true);
@@ -33,12 +41,19 @@ Deno.serve(async req => {
  const {data:isAdmin,error:adminError}=await scoped.rpc("portal_is_admin");
  check(adminError);
  const {route,input={}}=body;
- const {data:profile}=await db.from("profiles").select("*").eq("id",user.id).single();
+ const {data:memberProfile}=await db.from("profiles").select("*").eq("id",user.id).maybeSingle();
+ const {data:adminProfiles,error:adminProfileError}=await db.rpc("portal_admin_profile",{target:user.id});check(adminProfileError);
+ const adminProfile=adminProfiles?.[0];
+ const profile=memberProfile||adminProfile;
  if(!profile?.active) return reply({error:"Cuenta inactiva."},403);
  const {data:links,error:le}=await db.from("memberships").select("*,unions(*)").eq("user_id",user.id);
  check(le);
- const activeLinks=(links||[]).filter((m:any)=>m.active&&m.unions.active);
- const unionId=input.unionId || activeLinks[0]?.union_id;
+ const activeLinks=(links||[]).filter((m:any)=>m.active&&m.unions?.active);
+ const requestedUnion=typeof input.unionId==="string"&&/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(input.unionId)
+   ? input.unionId : undefined;
+ const unionId=route==="panel"
+   ? (activeLinks.some((m:any)=>m.union_id===requestedUnion)?requestedUnion:activeLinks[0]?.union_id)
+   : requestedUnion||activeLinks[0]?.union_id;
  const own=activeLinks.find((m:any)=>m.union_id===unionId);
  const president=own?.role==="Presidente";
  const permitted=()=>{if(!isAdmin&&!president) throw new Error("Acceso denegado.");};
@@ -46,15 +61,16 @@ Deno.serve(async req => {
    if(typeof input.password!=="string"||input.password.length<12||input.password.length>256) throw new Error("La nueva clave debe tener al menos 12 caracteres.");
    if(input.password===input.currentPassword)throw new Error("Elige una clave diferente a la temporal.");
    const verifier=createClient(Deno.env.get("SUPABASE_URL")!,Deno.env.get("SUPABASE_ANON_KEY")!,{auth:{persistSession:false}});
-   const {error:verification}=await verifier.auth.signInWithPassword({email:profile.email,password:input.currentPassword});
+   const {error:verification}=await verifier.auth.signInWithPassword({email:profile.auth_email||profile.email,password:input.currentPassword});
    if(verification)throw new Error("La clave temporal es incorrecta.");
    const {error:e}=await db.auth.admin.updateUserById(user.id,{password:input.password});check(e);
-   const {error:p}=await db.from("profiles").update({must_change_password:false}).eq("id",user.id);check(p);
+   const {error:p}=await (adminProfile?db.rpc("portal_admin_password_changed",{target:user.id}):db.from("profiles").update({must_change_password:false}).eq("id",user.id));check(p);
    return reply({});
  }
  if(profile.must_change_password) return reply({temporaryPassword:true});
  if(route==="panel"||route==="admin/panel"){
    if(route==="admin/panel"&&!isAdmin) return reply({error:"Acceso de Admin requiere autenticador."},403);
+   if(route==="panel"&&!own)return reply({name:profile.full_name,noMembership:true,memberships:[],active:null,members:[],updates:[]});
    const adminPanel=route==="admin/panel";
    const unionsQuery=scoped.from("unions").select("*");
    const membersQuery=scoped.from("memberships").select("*");
@@ -86,7 +102,6 @@ Deno.serve(async req => {
    const memberships=activeLinks.map((m:any)=>({union:m.union_id,name:m.unions.name,role:m.role}));
    const active=memberships.find((m:any)=>m.union===unionId);
    const driver=convert({user_id:user.id,union_id:unionId}).driver;
-   if(!own)return reply({error:"Selecciona un sindicato activo."},403);
    const {data:visuals,error:visualError}=await scoped.from("member_visuals").select("*").eq("union_id",unionId).eq("user_id",user.id).maybeSingle();check(visualError);
    const {data:vehicle,error:vehicleError}=await scoped.from("member_vehicles").select("*").eq("union_id",unionId).eq("user_id",user.id).maybeSingle();check(vehicleError);
    const {data:requests,error:requestsError}=await scoped.from("vehicle_requests").select("*").eq("union_id",unionId).order("created_at",{ascending:false});check(requestsError);
@@ -158,10 +173,11 @@ Deno.serve(async req => {
    if(!/^\d{7,8}[\dK]$/.test(rut)) throw new Error("Revisa el RUT.");
    if(route==="members"&&!/^\d{9}$/.test(input.password)) throw new Error("La clave temporal debe tener 9 dígitos.");
    if(route==="unions"&&String(input.password).length<12) throw new Error("La clave temporal debe tener al menos 12 caracteres.");
-   const {data:account,error:ae}=await db.auth.admin.createUser({email:input.email,password:input.password,email_confirm:true});check(ae);
+   const authEmail=crypto.randomUUID()+"@login.misindicato.invalid";
+   const {data:account,error:ae}=await db.auth.admin.createUser({email:authEmail,password:input.password,email_confirm:true});check(ae);
    let createdUnion:string|undefined;
    try {
-    const {error:e}=await db.from("profiles").insert({id:account.user!.id,rut,full_name:input.name,email:input.email});check(e);
+    const {error:e}=await db.from("profiles").insert({id:account.user!.id,rut,full_name:input.name,email:input.email,auth_email:authEmail});check(e);
     let target=unionId;
     if(route==="unions"){const {data:u,error:ue}=await db.from("unions").insert({name:input.unionName,slug:String(input.slug).toLowerCase(),rut:input.unionRut,email:input.unionEmail}).select().single();check(ue);target=u.id;createdUnion=u.id;}
     const role=route==="unions"?"Presidente":input.role;
@@ -183,8 +199,6 @@ Deno.serve(async req => {
    else{
     const {count}=await db.from("memberships").select("*",{count:"exact",head:true}).eq("user_id",input.id);
     if(count!>1&&!isAdmin) throw new Error("La cuenta vinculada requiere intervención de Admin.");
-    const {data:previous}=await db.from("profiles").select("email").eq("id",input.id).single();
-    if(previous?.email!==input.email){const {error:a}=await db.auth.admin.updateUserById(input.id,{email:input.email,email_confirm:true});check(a);}
     const {error:e}=await db.from("profiles").update({full_name:input.name,email:input.email}).eq("id",input.id);check(e);
     const {error:d}=await db.from("driver_details").upsert({union_id:unionId,user_id:input.id,...driverInput(input)});check(d);
     const {error:m}=await db.from("memberships").update({active:input.active}).eq("union_id",unionId).eq("user_id",input.id);check(m);

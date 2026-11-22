@@ -108,7 +108,7 @@
   },
   async request(route,input={}){
    if(route==='login'||route==='general/login'){
-    save(await edge('login',{...input,slug:new URLSearchParams(location.search).get('union')||''}));
+    save(await edge(route==='general/login'?'admin/login':'login',{...input,slug:new URLSearchParams(location.search).get('union')||''}));
     sessionStorage.removeItem('misindicato.union');
     if(route==='general/login')await mfa(input.code);
     return {destination:route==='general/login'?'/admin':'/panel'};
@@ -118,7 +118,12 @@
    const unionId=sessionStorage.getItem('misindicato.union');
    if(route==='select'){sessionStorage.setItem('misindicato.union',input.union);return edge('panel',{unionId:input.union});}
    const result=await edge(route,{...input,unionId});
-   if(route==='panel'||route==='admin/panel')return result;
+   if(route==='panel'){
+     if(result.active?.union)sessionStorage.setItem('misindicato.union',result.active.union);
+     else sessionStorage.removeItem('misindicato.union');
+     return result;
+   }
+   if(route==='admin/panel')return result;
    return edge(general?'admin/panel':'panel',{unionId});
   }
  };
