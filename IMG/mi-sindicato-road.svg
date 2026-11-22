@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="144" height="28" viewBox="0 0 144 28">
+  <style>
+    .road { animation: drive 3s linear infinite; }
+    .car-height { animation: follow 3s linear infinite; }
+    .car { animation: steer 3s ease-in-out infinite; }
+    @keyframes drive { to { transform: translateX(-144px); } }
+    @keyframes follow {
+      0%, 50% { transform: translateY(0); animation-timing-function: cubic-bezier(.33, .67, .67, 1); }
+      25% { transform: translateY(2.55px); animation-timing-function: cubic-bezier(.33, 0, .67, .33); }
+      75% { transform: translateY(-2.55px); animation-timing-function: cubic-bezier(.33, 0, .67, .33); }
+      100% { transform: translateY(0); }
+    }
+    @keyframes steer {
+      0%, 100% { transform: rotate(8deg); }
+      50% { transform: rotate(-8deg); }
+    }
+    @media (prefers-reduced-motion: reduce) { .road, .car-height, .car { animation: none; } }
+  </style>
+  <defs>
+    <path id="route" pathLength="63" d="M-144 14 C-120 10.6-96 10.6-72 14 S-24 17.4 0 14 S48 10.6 72 14 S120 17.4 144 14 S192 10.6 216 14 S264 17.4 288 14 S336 10.6 360 14"/>
+  </defs>
+  <g class="road" fill="none">
+    <use href="#route" stroke="#626573" stroke-width="17"/>
+    <use href="#route" stroke="#292b33" stroke-width="15"/>
+    <use href="#route" stroke="#f5f5f7" stroke-opacity=".7" stroke-dasharray="5 4"/>
+  </g>
+  <g transform="translate(72 14)">
+    <g class="car-height">
+    <g class="car">
+    <rect x="-11" y="-5.5" width="22" height="11" rx="4" fill="#ffb51b" stroke="#101116"/>
+    <path d="M-6-3h2v6h-2z M4-3h3l1 3-1 3H4z" fill="#191b22"/>
+    <path d="M9-3v1m0 4v1" stroke="#fff" stroke-linecap="round"/>
+    </g>
+    </g>
+  </g>
+</svg>
