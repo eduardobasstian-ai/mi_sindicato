@@ -33,4 +33,7 @@ La interfaz HTTP utiliza cloud-portal.js y la función Supabase portal, con cuen
 
 La primera cuenta de Admin corresponde a eduardo.basstian@gmail.com. Completa la confirmación del correo y usa «Establecer o recuperar clave de Admin» para elegir tu contraseña. Configura las URLs permitidas de Auth en Supabase para la dirección publicada.
 
-cloudflare/images-worker.js contiene el servicio de imágenes privadas con límite de 10 MB, comprobación de identidad y aislamiento por sindicato y propietario. Su despliegue requiere Workers Scripts Write y un binding IMAGES al bucket mi-sindicato-imagenes. La carga de imágenes está pendiente de activar cuando este servicio esté publicado.
+cloudflare/images-worker.js contiene el servicio de imágenes privadas con límite de 10 MB, comprobación de identidad y aislamiento por sindicato y propietario. Su despliegue requiere Workers Scripts Write y un binding IMAGES al bucket mi-sindicato-imagenes. El servicio está publicado en https://mi-sindicato-imagenes.eduardo-basstian.workers.dev y la ficha de socio permite subir y consultar imágenes privadas.
+
+Sitio publicado: https://eduardobasstian-ai.github.io/mi_sindicato/
+Admin: https://eduardobasstian-ai.github.io/mi_sindicato/sindicato-panel.html?mode=admin

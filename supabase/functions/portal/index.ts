@@ -16,6 +16,11 @@ Deno.serve(async req => {
    const login=createClient(Deno.env.get("SUPABASE_URL")!,Deno.env.get("SUPABASE_ANON_KEY")!,{auth:{persistSession:false}});
    const {data,error}=await login.auth.signInWithPassword({email:p.email,password:body.input.password});
    if(error) return reply({error:"Usuario o clave incorrectos."},401);
+   if(body.input.slug){
+     const {data:affiliations,error:affiliationError}=await db.from("memberships").select("union_id,unions!inner(slug,active)").eq("user_id",data.user.id).eq("active",true).eq("unions.slug",body.input.slug).eq("unions.active",true);
+     check(affiliationError);
+     if(!affiliations?.length)return reply({error:"La cuenta no tiene acceso a este sindicato."},403);
+   }
    return reply(data.session);
  }
  const token=req.headers.get("Authorization")?.replace(/^Bearer /,"") || "";
@@ -39,6 +44,10 @@ Deno.serve(async req => {
  const permitted=()=>{if(!isAdmin&&!president) throw new Error("Acceso denegado.");};
  if(route==="password"){
    if(typeof input.password!=="string"||input.password.length<12||input.password.length>256) throw new Error("La nueva clave debe tener al menos 12 caracteres.");
+   if(input.password===input.currentPassword)throw new Error("Elige una clave diferente a la temporal.");
+   const verifier=createClient(Deno.env.get("SUPABASE_URL")!,Deno.env.get("SUPABASE_ANON_KEY")!,{auth:{persistSession:false}});
+   const {error:verification}=await verifier.auth.signInWithPassword({email:profile.email,password:input.currentPassword});
+   if(verification)throw new Error("La clave temporal es incorrecta.");
    const {error:e}=await db.auth.admin.updateUserById(user.id,{password:input.password});check(e);
    const {error:p}=await db.from("profiles").update({must_change_password:false}).eq("id",user.id);check(p);
    return reply({});
@@ -51,7 +60,7 @@ Deno.serve(async req => {
    const {data:people,error:pe}=await scoped.from("profiles").select("*");check(pe);
    const {data:drivers}=await scoped.from("driver_details").select("*");
    const convert=(m:any)=>{const p=people?.find((p:any)=>p.id===m.user_id);const d=drivers?.find((d:any)=>d.user_id===m.user_id&&d.union_id===m.union_id);
-    return {id:m.user_id,name:p?.full_name,username:p?.username,email:p?.email,role:m.role,active:m.active,temporaryPassword:p?.must_change_password,
+    return {id:m.user_id,rut:p?.rut,name:p?.full_name,username:p?.username,email:p?.email,role:m.role,active:m.active,temporaryPassword:p?.must_change_password,
      driver:d?{nationalityType:d.nationality_type,nationality:d.nationality,address:d.address,commune:d.commune,platforms:d.platforms,vehicleModel:d.vehicle_model,vehicleYear:String(d.vehicle_year),plate:d.plate}:undefined,platforms:d?.platforms||[],shared:false};};
    if(route==="admin/panel"){
     const byRole=Object.fromEntries(roles.map(r=>[r,(members||[]).filter((m:any)=>m.role===r).length]));
@@ -65,6 +74,15 @@ Deno.serve(async req => {
    const active=memberships.find((m:any)=>m.union===unionId);
    const driver=convert({user_id:user.id,union_id:unionId}).driver;
    return reply({name:profile.full_name,memberships,active,members:(members||[]).filter((m:any)=>m.union_id===unionId).map(convert),driver:{...driver,rut:profile.rut,username:profile.username,email:profile.email}});
+ }
+ if(route==="media/record"||route==="media/list"){
+   if(!own)throw new Error("Acceso denegado.");
+   if(route==="media/list"){
+    const {data,error}=await db.from("media_objects").select("id,object_key").eq("union_id",unionId).eq("owner_id",user.id).order("created_at",{ascending:false});check(error);return reply(data);
+   }
+   if(typeof input.key!=="string"||!input.key.startsWith(unionId+"/"+user.id+"/")||input.key.includes(".."))throw new Error("Referencia de imagen inválida.");
+   const {error}=await db.from("media_objects").insert({union_id:unionId,owner_id:user.id,object_key:input.key,content_type:input.contentType,size_bytes:input.size});check(error);
+   return reply({});
  }
  if(route==="transfer-office"||route==="link"){
   if(!isAdmin)throw new Error("Solo Admin puede autorizar esta operación.");
@@ -115,6 +133,8 @@ Deno.serve(async req => {
    else{
     const {count}=await db.from("memberships").select("*",{count:"exact",head:true}).eq("user_id",input.id);
     if(count!>1&&!isAdmin) throw new Error("La cuenta vinculada requiere intervención de Admin.");
+    const {data:previous}=await db.from("profiles").select("email").eq("id",input.id).single();
+    if(previous?.email!==input.email){const {error:a}=await db.auth.admin.updateUserById(input.id,{email:input.email,email_confirm:true});check(a);}
     const {error:e}=await db.from("profiles").update({full_name:input.name,email:input.email}).eq("id",input.id);check(e);
     const {error:d}=await db.from("driver_details").upsert({union_id:unionId,user_id:input.id,...driverInput(input)});check(d);
     const {error:m}=await db.from("memberships").update({active:input.active}).eq("union_id",unionId).eq("user_id",input.id);check(m);

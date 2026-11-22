@@ -244,6 +244,7 @@ function renderUnionDirectory(data, content, intro) {
       else {
         const link = element('a', '/' + union.slug, pathCell);
         link.href = '/' + union.slug;
+        if (window.CloudPortal) link.href = 'index.html?union=' + encodeURIComponent(union.slug);
         if (localDemo) {
           link.removeAttribute('target');
           link.onclick = event => { event.preventDefault(); localDemo.navigate('/' + union.slug); };
@@ -501,6 +502,36 @@ function renderDriver(data, parent) {
   element('h2', data.active.name + ' · Socio conductor', memberArea);
   element('h3', profile['Socio conductor'][0], memberArea);
   element('p', profile['Socio conductor'][1], memberArea);
+  if (window.CloudPortal && !localDemo) {
+    const images=element('div','',memberArea);
+    const upload=element('input','',element('label','Mis imágenes',images));
+    upload.type='file';
+    upload.accept='image/jpeg,image/png,image/webp';
+    const feedback=element('p','',images);
+    feedback.setAttribute('role','status');
+    const gallery=element('div','',images);
+    async function refreshImages() {
+      gallery.replaceChildren();
+      const items=await CloudPortal.images(data.active.union);
+      for(const item of items) {
+        const image=element('img','',gallery);
+        image.alt='Imagen del socio';
+        image.style.cssText='width:120px;height:120px;object-fit:cover;margin:8px;border-radius:8px';
+        const url=await CloudPortal.image(item.object_key,data.active.union);
+        image.onload=()=>URL.revokeObjectURL(url);
+        image.src=url;
+      }
+    }
+    upload.addEventListener('change',async()=>{
+      if(!upload.files[0])return;
+      upload.disabled=true;
+      feedback.textContent='Subiendo imagen…';
+      try{await CloudPortal.upload(upload.files[0],data.active.union);await refreshImages();feedback.textContent='Imagen guardada.';}
+      catch(error){feedback.textContent=error.message;}
+      finally{upload.disabled=false;upload.value='';}
+    });
+    refreshImages().catch(error=>{feedback.textContent=error.message;});
+  }
   if (data.driver) {
     const details = element('dl', '', memberArea);
     const driver = data.driver;
@@ -653,7 +684,7 @@ function openMemberDialog(content, trigger, member) {
   driverFields(create.node);
   if (member) {
     const fields = create.node.elements;
-    for (const [key, value] of Object.entries({ ...member.driver, name: member.name, email: member.email, rut: member.id })) {
+    for (const [key, value] of Object.entries({ ...member.driver, name: member.name, email: member.email, rut: member.rut || member.id })) {
       if (key !== 'platforms' && fields[key] && typeof value === 'string') fields[key].value = value;
     }
     fields.rut.dispatchEvent(new Event('input'));
