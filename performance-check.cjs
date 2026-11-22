@@ -32,6 +32,23 @@ async function main(){
  const nav=parent.children[0];nav.children[2].onclick();assert.equal(pager.slice(items)[0],25);
  search.listener();assert.equal(pager.slice([9999])[0],9999,'Search can find final record');
  assert.equal(nav.hidden,true);assert.equal(pager.slice([]).length,0);
+ const mobileStorage=new Map([['misindicato.auth.v1.member',JSON.stringify({user:{id:'member-a'},access_token:'mobile',refresh_token:'refresh',expires_at:9999999999})]]);
+ const messages=[];let requested;
+ const mobile={...context,location:{...context.location,search:'?app=socio&mode=admin'},
+  window:{addEventListener(){},MiSindicatoApp:{postMessage:message=>messages.push(JSON.parse(message))}},
+  sessionStorage:{getItem:k=>mobileStorage.get(k),setItem:(k,v)=>mobileStorage.set(k,v),removeItem:k=>mobileStorage.delete(k)},
+  fetch:async(url,options)=>{requested=JSON.parse(options.body);return {ok:true,json:async()=>({active:{union:'own-union'}})};}
+ };
+ vm.createContext(mobile);vm.runInContext(readFileSync('cloud-portal.js','utf8'),mobile);
+ const app=mobile.window.CloudPortal;
+ assert.equal(app.general,false,'Mobile view never opens general administration');
+ assert.equal(app.mobile,true);
+ await app.request('panel');assert.equal(requested.input.memberView,true,'Mobile panel requests only own details');
+ await assert.rejects(app.request('admin/panel'));
+ await assert.rejects(app.request('members/role'));
+ await assert.rejects(app.request('vehicle/review'));
+ app.navigate('/');assert.equal(messages.at(-1).type,'logout');
  console.log('OK: refresh deduplication, photo deduplication, union isolation, retry, 10,000-record pagination and search reset.');
+ console.log('OK: member-only app, own-data requests, blocked administration routes and native logout.');
 }
 main().catch(error=>{console.error(error);process.exitCode=1;});

@@ -23,6 +23,7 @@ const status = document.querySelector('#status');
 const logout = document.querySelector('#logout');
 const localDemo = window.parent !== window && window.parent.LocalDemo;
 const general = localDemo ? window.parent.location.hash === '#admin' : window.CloudPortal?.general || location.pathname === '/admin';
+const memberApp=Boolean(window.CloudPortal?.mobile);
 function navigate(route) {
   if (localDemo) localDemo.navigate(route);
   else if (window.CloudPortal) CloudPortal.navigate(route);
@@ -207,8 +208,8 @@ function dashboard({ title, subtitle, username, menu, selected, open, eyebrow })
   const layout = element('div', '', panel);
   layout.className = 'admin-layout';
   const nav = element('nav', '', layout);
-  nav.setAttribute('aria-label', 'Administración');
-  const navTitle = element('span', 'Administración', nav);
+  nav.setAttribute('aria-label', memberApp?'Mi Sindicato':'Administración');
+  const navTitle = element('span', memberApp?'Mi Sindicato':'Administración', nav);
   navTitle.className = 'admin-eyebrow';
   const content = element('div', '', layout);
   for (const [tab, icon] of menu) {
@@ -475,7 +476,12 @@ function renderAdmin(data) {
 function render(data) {
   panel.replaceChildren();
   document.body.classList.remove('member-profile');
+  document.body.classList.toggle('member-app',memberApp);
   logout.hidden = false;
+  if(memberApp){
+    if(data.general){navigate('/');return;}
+    queueMicrotask(()=>window.MiSindicatoApp?.postMessage(JSON.stringify({type:'ready'})));
+  }
   if (data.general) return renderAdmin(data);
   if (data.temporaryPassword) {
     const change = form('Cambia tu clave temporal', 'Guardar nueva clave', 'password');
@@ -488,8 +494,7 @@ function render(data) {
     const notice=element('section','',panel);
     element('h1','Hola, '+data.name,notice);
     element('p','Esta cuenta todavía no tiene una afiliación activa a un sindicato. Solicita a Presidencia o a Admin Mi Sindicato que revise su asignación.',notice);
-    const admin=element('button','Acceder a administración general',notice);
-    admin.onclick=()=>navigate('/admin');
+    if(!memberApp){const admin=element('button','Acceder a administración general',notice);admin.onclick=()=>navigate('/admin');}
     return;
   }
 
@@ -569,8 +574,8 @@ function renderDriver(data, parent) {
 let presidentTab = 'Resumen';
 
 function renderPresident(data) {
-  const president = data.active.role === 'Presidente';
-  const director = data.active.role !== 'Socio conductor';
+  const president = !memberApp&&data.active.role === 'Presidente';
+  const director = !memberApp&&data.active.role !== 'Socio conductor';
   const menu = president
     ? [['Resumen', '◆'], ['Socios conductores', '▦'], ['Cargos directivos', '♙'], ['Mi perfil', '♙'], ['Mis cuentas', '$'], ['Información del sindicato', '☷'], ['Mi ficha', '☷']]
     : [['Mi perfil', '♙'], ['Mis cuentas', '$'], ['Mis vehículos', '▦'], ['Información del sindicato', '☷'], ['Mi ficha', '☷']];
@@ -581,8 +586,14 @@ function renderPresident(data) {
     render(data);
     panel.querySelector('h1').focus();
   }
+  if(memberApp)window.miSindicatoGoHome=()=>{
+    const dialog=document.querySelector('dialog[open]');
+    if(dialog){dialog.close();return true;}
+    if(presidentTab==='Mi perfil')return false;
+    open('Mi perfil');return true;
+  };
   const { content, intro, headings } = dashboard({
-    title: president ? 'Panel de Presidencia' : profile[data.active.role][0], subtitle: data.active.name, username: data.name,
+    title: memberApp?'Mi perfil':president ? 'Panel de Presidencia' : profile[data.active.role][0], subtitle: data.active.name, username: data.name,
     selected: presidentTab, open, eyebrow: director ? 'Gestión del sindicato' : 'Socio conductor',
     menu
   });
@@ -681,7 +692,7 @@ function renderPresident(data) {
 }
 
 function renderUnionUpdates(data,content) {
-  if(data.active.role!=='Socio conductor') {
+  if(!memberApp&&data.active.role!=='Socio conductor') {
     const publish=form('Compartir información de '+data.active.role,'Publicar para los socios','updates',render,content);
     input(publish.node,'Título','title',{maxLength:160});
     const body=element('textarea','',element('label','Informe, actividad o comunicado',publish.node));
@@ -870,6 +881,7 @@ if (window.CloudPortal?.recovery) {
   if (data.temporaryPassword || Boolean(data.general) === general) render(data);
   else navigate(data.general ? '/admin' : '/panel');
 }).catch(error => {
+  if(memberApp&&error.message!=='Inicia sesión.')window.MiSindicatoApp?.postMessage(JSON.stringify({type:'error',message:error.message}));
   if (general) generalLogin();
   else if (error.message === 'Inicia sesión.') navigate('/');
   else status.textContent = error.message;

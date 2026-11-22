@@ -80,13 +80,14 @@ Deno.serve(async req => {
    if(route==="admin/panel"&&!isAdmin) return reply({error:"Acceso de Admin requiere autenticador."},403);
    if(route==="panel"&&!own)return reply({name:profile.full_name,noMembership:true,memberships:[],active:null,members:[],updates:[]});
    const adminPanel=route==="admin/panel";
+   const memberView=!adminPanel&&input.memberView===true;
    const unionsQuery=scoped.from("unions").select("*");
    const membersQuery=scoped.from("memberships").select("*");
    const driversQuery=scoped.from("driver_details").select("*");
    const [unionResult,memberResult,driverResult]=await Promise.all([
     adminPanel?unionsQuery:unionsQuery.eq("id",unionId),
-    adminPanel?membersQuery:membersQuery.eq("union_id",unionId),
-    adminPanel?driversQuery:driversQuery.eq("union_id",unionId)
+    adminPanel?membersQuery:memberView?membersQuery.eq("union_id",unionId).eq("user_id",user.id):membersQuery.eq("union_id",unionId),
+    adminPanel?driversQuery:memberView?driversQuery.eq("union_id",unionId).eq("user_id",user.id):driversQuery.eq("union_id",unionId)
    ]);
    check(unionResult.error);check(memberResult.error);check(driverResult.error);
    const unions=unionResult.data,members=memberResult.data,drivers=driverResult.data;
@@ -118,10 +119,11 @@ Deno.serve(async req => {
    const memberships=activeLinks.map((m:any)=>({union:m.union_id,name:m.unions.name,role:m.role}));
    const active=memberships.find((m:any)=>m.union===unionId);
    const driver=convert({user_id:user.id,union_id:unionId}).driver;
+   const requestsQuery=scoped.from("vehicle_requests").select("*").eq("union_id",unionId).order("created_at",{ascending:false});
    const extra=await Promise.all([
     scoped.from("member_visuals").select("*").eq("union_id",unionId).eq("user_id",user.id).maybeSingle(),
     scoped.from("member_vehicles").select("*").eq("union_id",unionId).eq("user_id",user.id).maybeSingle(),
-    scoped.from("vehicle_requests").select("*").eq("union_id",unionId).order("created_at",{ascending:false}),
+    memberView?requestsQuery.eq("user_id",user.id):requestsQuery,
     scoped.from("union_updates").select("*").eq("union_id",unionId).order("created_at",{ascending:false}).limit(50)
    ]);
    for(const result of extra)check(result.error);

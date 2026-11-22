@@ -101,7 +101,7 @@ function renderVisualProfile(data, content, open) {
   if(latest)element('p',latest.body.slice(0,160),item);
   element('button','Ver información',item).onclick=()=>open('Información del sindicato');
  }
- if(['Presidente','Tesorero','Secretario'].includes(data.active.role)){
+ if(!window.CloudPortal?.mobile&&['Presidente','Tesorero','Secretario'].includes(data.active.role)){
   const requests=(data.vehicleRequests||[]).filter(item=>item.status==='pending');
   const approvals=card(content,'Cambios de vehículo por revisar · '+requests.length);
   for(const item of requests){

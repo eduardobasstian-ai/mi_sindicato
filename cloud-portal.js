@@ -3,13 +3,15 @@
  const url='https://eyucrgaszheehdklnivx.supabase.co';
  const key='sb_publishable_xgRp7Y94c5ak3X0jljNGgA_adsw-PFu';
  const storage='misindicato.auth.v1';
- const general=new URLSearchParams(location.search).get('mode')==='admin'||location.pathname==='/admin';
- let session=JSON.parse(localStorage.getItem(storage+(general?'.admin':'.member'))||'null');
+ const mobile=new URLSearchParams(location.search).get('app')==='socio';
+ const sessionStore=mobile?sessionStorage:localStorage;
+ const general=!mobile&&(new URLSearchParams(location.search).get('mode')==='admin'||location.pathname==='/admin');
+ let session=JSON.parse(sessionStore.getItem(storage+(general?'.admin':'.member'))||'null');
  const photos=new Map();
  let photoBytes=0, refreshPending;
  const clearPhotos=()=>{photos.clear();photoBytes=0;};
- const save=s=>{if(!s||s.user?.id!==session?.user?.id)clearPhotos();session=s;localStorage.setItem(storage+(general?'.admin':'.member'),JSON.stringify(s));};
- window.addEventListener('storage',event=>{if(event.key===storage+(general?'.admin':'.member')){clearPhotos();session=JSON.parse(event.newValue||'null');}});
+ const save=s=>{if(!s||s.user?.id!==session?.user?.id)clearPhotos();session=s;sessionStore.setItem(storage+(general?'.admin':'.member'),JSON.stringify(s));if(mobile)window.MiSindicatoApp?.postMessage(JSON.stringify({type:'session',session:s}));};
+ window.addEventListener('storage',event=>{if(!mobile&&event.key===storage+(general?'.admin':'.member')){clearPhotos();session=JSON.parse(event.newValue||'null');}});
  const fragment=new URLSearchParams(location.hash.slice(1));
  const recovery=fragment.get('type')==='recovery';
  if(fragment.get('access_token')){
@@ -34,13 +36,22 @@
   return session?.access_token;
  }
  async function edge(route,input={}){
+  if(mobile&&route==='panel')input={...input,memberView:true};
   const access=await token();
   const response=await fetch(url+'/functions/v1/portal',{method:'POST',headers:{apikey:key,'Content-Type':'application/json',Authorization:'Bearer '+(access||key)},body:JSON.stringify({route,input})});
   const result=await response.json();
   if(!response.ok) { if(response.status===401)save(null); throw new Error(result.error||'No se pudo completar la operación.'); }
   return result;
  }
- function navigate(route){location.href=route==='/admin'?'sindicato-panel.html?mode=admin':route==='/panel'?'sindicato-panel.html':'index.html';}
+ function navigate(route){
+  if(mobile){
+   if(route==='/admin')return;
+   if(route==='/panel')location.replace('sindicato-panel.html?app=socio');
+   else window.MiSindicatoApp?.postMessage(JSON.stringify({type:'logout'}));
+   return;
+  }
+  location.href=route==='/admin'?'sindicato-panel.html?mode=admin':route==='/panel'?'sindicato-panel.html':'index.html';
+ }
  async function mfa(code){
   const user=await auth('user',null,'GET');
   let factor=user.factors?.find(f=>f.factor_type==='totp'&&f.status==='verified');
@@ -133,7 +144,7 @@
    if(imageObserver){lazyImages.set(image,job);imageObserver.observe(image);}
    else {imageJobs.push(job);runImages();}
   },
-  general,navigate,recovery,
+  general,mobile,navigate,recovery,
   async upload(file,unionId,kind) {
     if(!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>10485760)throw new Error('Selecciona JPEG, PNG o WebP de hasta 10 MB.');
     file=await optimizePhoto(file,kind);
@@ -180,6 +191,7 @@
     navigate('/admin');
   },
   async request(route,input={}){
+   if(mobile&&!['login','panel','select','password','logout','profile/address','vehicle/request'].includes(route))throw new Error('Esta función se administra desde el sitio web.');
    if(route==='login'||route==='general/login'){
     save(await edge(route==='general/login'?'admin/login':'login',{...input,slug:new URLSearchParams(location.search).get('union')||''}));
     sessionStorage.removeItem('misindicato.union');
@@ -187,7 +199,7 @@
     return {destination:route==='general/login'?'/admin':'/panel'};
    }
    if(!session)throw new Error('Inicia sesión.');
-   if(route.endsWith('logout')){try{await auth('logout',{});}finally{save(null);navigate(general?'/admin':'/');}return {};}
+   if(route.endsWith('logout')){try{await auth(mobile?'logout?scope=local':'logout',{});}finally{save(null);navigate(general?'/admin':'/');}return {};}
    const unionId=sessionStorage.getItem('misindicato.union');
    if(route==='select'){sessionStorage.setItem('misindicato.union',input.union);return edge('panel',{unionId:input.union});}
    const result=await edge(route,{...input,unionId});

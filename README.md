@@ -39,3 +39,8 @@ Sitio publicado: https://eduardobasstian-ai.github.io/mi_sindicato/
 Admin: https://eduardobasstian-ai.github.io/mi_sindicato/sindicato-panel.html?mode=admin
 
 En la activación inicial de Admin, después de recuperar la contraseña y vincular el autenticador, puede solicitarse el cambio obligatorio pendiente. Usa la contraseña recién establecida como clave actual y elige una diferente para completar ese paso.
+
+
+## App de socios conductores
+
+La aplicación Flutter está en app-movil/. Solo muestra las vistas personales del socio, incluso para las cuentas con cargos directivos. La administración general y la gestión del sindicato siguen en la web. Consulta app-movil/README.md para compilar, instalar y conocer el estado de Android e iOS.

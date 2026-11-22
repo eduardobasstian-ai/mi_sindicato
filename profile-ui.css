@@ -29,3 +29,14 @@
 body.member-profile .admin-layout{width:min(1600px,calc(100% - 32px));grid-template-columns:190px minmax(0,1fr)}
 @media(max-width:1250px){.profile-grid{grid-template-columns:1fr 1fr}.profile-attendance{grid-column:1/-1;grid-row:auto}.profile-news-grid{grid-template-columns:1fr 1fr}.profile-identity{flex-direction:column;text-align:center}}
 @media(max-width:760px){body.member-profile .admin-layout{grid-template-columns:1fr}.profile-grid{display:flex;flex-direction:column}.profile-news-grid{grid-template-columns:1fr}.profile-identity{flex-direction:row;text-align:left}.profile-avatar{flex-basis:110px;width:110px;height:110px}.profile-attendance-ring{width:110px;height:110px;border-width:8px}}
+
+/* Member-only app keeps navigation compact and clear on a phone. */
+.member-app .admin-layout{grid-template-columns:minmax(0,1fr);margin:12px auto}
+.member-app .admin-layout>nav{display:flex;gap:6px;overflow-x:auto;padding:8px;flex-wrap:nowrap;position:sticky;top:0;z-index:5;background:#191b22}
+.member-app .admin-layout>nav .admin-eyebrow{display:none}
+.member-app .admin-layout>nav button{white-space:nowrap;width:auto;flex:0 0 auto;margin:0;padding:12px}
+.member-app .admin-brand strong,.member-app .admin-session span{display:none}
+.member-app .admin-brand img{width:140px}
+.member-app .profile-identity{flex-wrap:wrap}
+.member-app .profile-identity>div{min-width:0;overflow-wrap:anywhere}
+@media(max-width:520px){.member-app .admin-brand small{max-width:150px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.member-app .admin-intro{margin-top:12px}.member-app .profile-card{padding:16px}.member-app .profile-identity{gap:12px}}
