@@ -118,6 +118,15 @@
    const unionId=sessionStorage.getItem('misindicato.union');
    if(route==='select'){sessionStorage.setItem('misindicato.union',input.union);return edge('panel',{unionId:input.union});}
    const result=await edge(route,{...input,unionId});
+   if(route==='password'){
+     try{
+       save(await auth('token?grant_type=refresh_token',{refresh_token:session.refresh_token}));
+     }catch{
+       save(null);
+       navigate(general?'/admin':'/');
+       return {};
+     }
+   }
    if(route==='panel'){
      if(result.active?.union)sessionStorage.setItem('misindicato.union',result.active.union);
      else sessionStorage.removeItem('misindicato.union');

@@ -63,7 +63,12 @@ Deno.serve(async req => {
    const verifier=createClient(Deno.env.get("SUPABASE_URL")!,Deno.env.get("SUPABASE_ANON_KEY")!,{auth:{persistSession:false}});
    const {error:verification}=await verifier.auth.signInWithPassword({email:profile.auth_email||profile.email,password:input.currentPassword});
    if(verification)throw new Error("La clave temporal es incorrecta.");
-   const {error:e}=await db.auth.admin.updateUserById(user.id,{password:input.password});check(e);
+   const passwordResponse=await fetch(Deno.env.get("SUPABASE_URL")+"/auth/v1/user",{
+    method:"PUT",headers:{apikey:Deno.env.get("SUPABASE_ANON_KEY")!,Authorization:"Bearer "+token,"Content-Type":"application/json"},
+    body:JSON.stringify({password:input.password,current_password:input.currentPassword})
+   });
+   const passwordResult=await passwordResponse.json();
+   if(!passwordResponse.ok)throw new Error(passwordResult.msg||passwordResult.message||"No se pudo actualizar la clave.");
    const {error:p}=await (adminProfile?db.rpc("portal_admin_password_changed",{target:user.id}):db.from("profiles").update({must_change_password:false}).eq("id",user.id));check(p);
    return reply({});
  }
