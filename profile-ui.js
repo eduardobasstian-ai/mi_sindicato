@@ -68,7 +68,26 @@ function renderVisualProfile(data, content, open) {
  });
  const platforms=card(grid,'Plataformas de trabajo');platforms.classList.add('profile-platforms');
  const badges=element('div','',platforms);badges.className='profile-badges';
- for(const name of driver.platforms||[])element('span',name,badges).className='platform-badge platform-'+name.toLowerCase();
+ const platformLogos={
+  didi:[['didi.svg','DiDi']],
+  indrive:[['indrive-icon.svg',''],['indrive-name.svg','inDrive']],
+  cabify:[['cabify.svg','Cabify']],
+  getgo:[['getgo.png','GetGo']]
+ };
+ for(const name of driver.platforms||[]){
+  const platform=name.toLowerCase().replace(/\s/g,'');
+  const badge=element('span','',badges);
+  badge.className='platform-badge platform-'+platform;
+  const logos=platformLogos[platform];
+  if(logos){
+   for(const [file,description] of logos){
+    const logo=element('img','',badge);
+    logo.src='IMG/platforms/'+file;logo.alt=description;
+    logo.decoding='async';
+    logo.className=file==='indrive-icon.svg'?'platform-symbol':'platform-wordmark';
+   }
+  }else badge.textContent=name;
+ }
  if(!driver.platforms?.length)element('p','Sin plataformas registradas',platforms);
  const accounts=card(grid,'Mis cuentas');accounts.classList.add('profile-accounts');
  element('p','Registro de cuotas y movimientos pendiente de configuración.',accounts);
