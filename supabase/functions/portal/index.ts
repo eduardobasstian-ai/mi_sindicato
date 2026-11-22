@@ -55,10 +55,19 @@ Deno.serve(async req => {
  if(profile.must_change_password) return reply({temporaryPassword:true});
  if(route==="panel"||route==="admin/panel"){
    if(route==="admin/panel"&&!isAdmin) return reply({error:"Acceso de Admin requiere autenticador."},403);
-   const {data:unions,error:ue}=await scoped.from("unions").select("*");check(ue);
-   const {data:members,error:me}=await scoped.from("memberships").select("*");check(me);
-   const {data:people,error:pe}=await scoped.from("profiles").select("*");check(pe);
-   const {data:drivers}=await scoped.from("driver_details").select("*");
+   const adminPanel=route==="admin/panel";
+   const unionsQuery=scoped.from("unions").select("*");
+   const membersQuery=scoped.from("memberships").select("*");
+   const driversQuery=scoped.from("driver_details").select("*");
+   const [unionResult,memberResult,driverResult]=await Promise.all([
+    adminPanel?unionsQuery:unionsQuery.eq("id",unionId),
+    adminPanel?membersQuery:membersQuery.eq("union_id",unionId),
+    adminPanel?driversQuery:driversQuery.eq("union_id",unionId)
+   ]);
+   check(unionResult.error);check(memberResult.error);check(driverResult.error);
+   const unions=unionResult.data,members=memberResult.data,drivers=driverResult.data;
+   const peopleQuery=scoped.from("profiles").select("*");
+   const {data:people,error:pe}=await (adminPanel?peopleQuery:peopleQuery.in("id",[...new Set([user.id,...(members||[]).map((m:any)=>m.user_id)])]));check(pe);
    const convert=(m:any)=>{const p=people?.find((p:any)=>p.id===m.user_id);const d=drivers?.find((d:any)=>d.user_id===m.user_id&&d.union_id===m.union_id);
     return {id:m.user_id,rut:p?.rut,name:p?.full_name,username:p?.username,email:p?.email,role:m.role,active:m.active,temporaryPassword:p?.must_change_password,
      driver:d?{nationalityType:d.nationality_type,nationality:d.nationality,address:d.address,commune:d.commune,platforms:d.platforms,vehicleModel:d.vehicle_model,vehicleYear:String(d.vehicle_year),plate:d.plate}:undefined,platforms:d?.platforms||[],shared:false};};
@@ -77,8 +86,30 @@ Deno.serve(async req => {
    const memberships=activeLinks.map((m:any)=>({union:m.union_id,name:m.unions.name,role:m.role}));
    const active=memberships.find((m:any)=>m.union===unionId);
    const driver=convert({user_id:user.id,union_id:unionId}).driver;
-   const {data:updates,error:updatesError}=await scoped.from("union_updates").select("*").eq("union_id",unionId).order("created_at",{ascending:false});check(updatesError);
-   return reply({name:profile.full_name,memberships,active,updates:updates||[],members:(members||[]).filter((m:any)=>m.union_id===unionId).map(convert),driver:{...driver,rut:profile.rut,username:profile.username,email:profile.email}});
+   if(!own)return reply({error:"Selecciona un sindicato activo."},403);
+   const {data:visuals,error:visualError}=await scoped.from("member_visuals").select("*").eq("union_id",unionId).eq("user_id",user.id).maybeSingle();check(visualError);
+   const {data:vehicle,error:vehicleError}=await scoped.from("member_vehicles").select("*").eq("union_id",unionId).eq("user_id",user.id).maybeSingle();check(vehicleError);
+   const {data:requests,error:requestsError}=await scoped.from("vehicle_requests").select("*").eq("union_id",unionId).order("created_at",{ascending:false});check(requestsError);
+   const {data:updates,error:updatesError}=await scoped.from("union_updates").select("*").eq("union_id",unionId).order("created_at",{ascending:false}).limit(50);check(updatesError);
+   return reply({name:profile.full_name,userId:user.id,visuals,vehicle,vehicleRequests:requests||[],memberships,active,updates:updates||[],members:(members||[]).filter((m:any)=>m.union_id===unionId).map(convert),driver:{...driver,...(vehicle?{vehicleModel:vehicle.model,vehicleYear:String(vehicle.year),plate:vehicle.plate}:{}),rut:profile.rut,username:profile.username,email:profile.email}});
+ }
+ if(route==="vehicle/request"){
+   if(!own)throw new Error("Acceso denegado.");
+   const {error}=await db.from("vehicle_requests").insert({union_id:unionId,user_id:user.id,model:String(input.model||"").trim(),year:Number(input.year),plate:String(input.plate||"").trim().toUpperCase()});check(error);
+   return reply({});
+ }
+ if(route==="vehicle/review"){
+   if(!own||!["Presidente","Tesorero","Secretario"].includes(own.role))throw new Error("Acceso denegado.");
+   if(typeof input.approve!=="boolean")throw new Error("Indica la decisión.");
+   const {data:target}=await db.from("vehicle_requests").select("union_id").eq("id",input.requestId).single();
+   if(target?.union_id!==unionId)throw new Error("Acceso denegado.");
+   const {error}=await db.rpc("portal_review_vehicle",{request_id:input.requestId,actor:user.id,approve:input.approve});check(error);return reply({});
+ }
+ if(route==="profile/address"){
+   if(!own||!String(input.address||"").trim()||!String(input.commune||"").trim())throw new Error("Completa dirección y comuna.");
+   const {data:details}=await db.from("driver_details").select("user_id").eq("union_id",unionId).eq("user_id",user.id).maybeSingle();
+   if(!details)throw new Error("Solicita a Presidencia completar tu ficha inicial.");
+   const {error}=await db.from("driver_details").update({address:String(input.address).trim(),commune:String(input.commune).trim()}).eq("union_id",unionId).eq("user_id",user.id);check(error);return reply({});
  }
  if(route==="members/role"){
    if(!president)throw new Error("Solo el presidente puede asignar cargos.");
@@ -97,6 +128,10 @@ Deno.serve(async req => {
    }
    if(typeof input.key!=="string"||!input.key.startsWith(unionId+"/"+user.id+"/")||input.key.includes(".."))throw new Error("Referencia de imagen inválida.");
    const {error}=await db.from("media_objects").insert({union_id:unionId,owner_id:user.id,object_key:input.key,content_type:input.contentType,size_bytes:input.size});check(error);
+   if(["avatar","vehicle"].includes(input.kind)){
+    const column=input.kind==="avatar"?"avatar_key":"vehicle_photo_key";
+    const {error:visualError}=await db.from("member_visuals").upsert({union_id:unionId,user_id:user.id,[column]:input.key},{onConflict:"union_id,user_id"});check(visualError);
+   }
    return reply({});
  }
  if(route==="transfer-office"||route==="link"){

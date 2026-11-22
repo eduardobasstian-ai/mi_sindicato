@@ -206,6 +206,8 @@ function panel(session) {
         platforms: link.driver?.platforms || [], temporaryPassword: Boolean(member.temporaryPassword) };
     }) : [];
   return { name: person.name, memberships, active, members,
+    userId:session.id,vehicleRequests:(data.vehicleRequests||[]).filter(request=>request.union_id===session.union&&
+      (request.user_id===session.id||['Presidente','Tesorero','Secretario'].includes(active?.role))),
     updates: (data.updates || []).filter(update=>update.union_id===session.union).slice().reverse(), driver: {
     rut: person.id, username: person.username, email: person.email, ...active?.driver
   } };
@@ -299,7 +301,25 @@ async function api(req, res, route) {
 
   const next = structuredClone(data);
   let resetPerson;
-  if (route === '/api/members/role' && membership(session)?.role === 'Presidente') {
+  if(route==='/api/profile/address'&&membership(session)){
+    const link=next.links.find(link=>link.union===session.union&&link.person===session.id);
+    if(!link.driver)fail(400,'Solicita a Presidencia completar tu ficha inicial.');
+    link.driver.address=field(input.address,'dirección',200);
+    link.driver.commune=field(input.commune,'comuna');
+  } else if(route==='/api/vehicle/request'&&membership(session)){
+    next.vehicleRequests ||= [];
+    if(next.vehicleRequests.some(item=>item.union_id===session.union&&item.user_id===session.id&&item.status==='pending'))fail(409,'Ya tienes una solicitud pendiente.');
+    const year=Number(input.year);
+    if(!Number.isInteger(year)||year<1900||year>new Date().getFullYear()+1)fail(400,'Año inválido.');
+    next.vehicleRequests.push({id:crypto.randomUUID(),union_id:session.union,user_id:session.id,model:field(input.model,'modelo'),year,plate:field(input.plate,'patente',20).toUpperCase(),status:'pending',created_at:new Date().toISOString()});
+  } else if(route==='/api/vehicle/review'&&['Presidente','Tesorero','Secretario'].includes(membership(session)?.role)){
+    const target=next.vehicleRequests?.find(item=>item.id===input.requestId&&item.union_id===session.union&&item.status==='pending');
+    if(!target||typeof input.approve!=='boolean')fail(400,'Solicitud inválida o ya revisada.');
+    const link=next.links.find(link=>link.union===session.union&&link.person===target.user_id&&link.active!==false);
+    if(!link?.driver)fail(400,'La ficha del socio debe estar completa.');
+    if(input.approve)Object.assign(link.driver,{vehicleModel:target.model,vehicleYear:String(target.year),plate:target.plate});
+    target.status=input.approve?'approved':'rejected';
+  } else if (route === '/api/members/role' && membership(session)?.role === 'Presidente') {
     const member=next.links.find(link=>link.union===session.union&&link.person===input.person&&link.active!==false&&link.role!=='Presidente');
     if(!member||!roles.slice(1).includes(input.role))fail(400,'Selecciona un socio activo y un cargo válido.');
     member.role=input.role;

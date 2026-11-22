@@ -1,0 +1,17 @@
+---
+description: Velocidad, facilidad de uso y experiencia responsive de Mi Sindicato
+alwaysApply: true
+---
+
+# Prioridades de Mi Sindicato
+
+- Priorizar rapidez de carga y respuesta en todos los perfiles y flujos.
+- Diseñar primero para celular y adaptar la misma experiencia a computador.
+- Favorecer pantallas intuitivas, acciones visibles, botones cómodos e iconos con etiquetas claras.
+- Reducir pasos, escritura y datos repetidos. Reutilizar la información ya registrada.
+- Mostrar estados de carga, confirmación y errores cerca de la acción.
+- Cargar fotos de forma diferida, optimizar su tamaño y evitar solicitudes duplicadas.
+- Consultar solo los datos del sindicato y de la pantalla actual. Paginar historiales extensos.
+- Reutilizar componentes y evitar dependencias pesadas sin una necesidad demostrada.
+- Mantener aislamiento entre sindicatos, autenticación y aprobación de cambios de vehículo.
+- Verificar los flujos afectados y revisar la experiencia en anchos de celular y computador.

@@ -80,14 +80,14 @@
  }
  window.CloudPortal={
   general,navigate,recovery,
-  async upload(file,unionId) {
+  async upload(file,unionId,kind) {
     if(!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>10485760)throw new Error('Selecciona JPEG, PNG o WebP de hasta 10 MB.');
     const response=await fetch('https://mi-sindicato-imagenes.eduardo-basstian.workers.dev',{
       method:'POST',headers:{Authorization:'Bearer '+await token(),'Content-Type':file.type,'X-Union-Id':unionId},body:file
     });
     const result=await response.json();
     if(!response.ok)throw new Error(result.error||'No se pudo subir la imagen.');
-    await edge('media/record',{unionId,...result});
+    await edge('media/record',{unionId,...result,kind});
     return result;
   },
   async images(unionId) { return edge('media/list',{unionId}); },

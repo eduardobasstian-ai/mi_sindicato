@@ -455,6 +455,7 @@ function renderAdmin(data) {
 
 function render(data) {
   panel.replaceChildren();
+  document.body.classList.remove('member-profile');
   logout.hidden = false;
   if (data.general) return renderAdmin(data);
   if (data.temporaryPassword) {
@@ -546,9 +547,9 @@ function renderPresident(data) {
   const president = data.active.role === 'Presidente';
   const director = data.active.role !== 'Socio conductor';
   const menu = president
-    ? [['Resumen', '◆'], ['Socios conductores', '▦'], ['Cargos directivos', '♙'], ['Información del sindicato', '☷'], ['Mi ficha', '☷']]
-    : [['Resumen', '◆'], ['Mis cuentas', '$'], ['Mis vehículos', '▦'], ['Información del sindicato', '☷'], ['Mi ficha', '☷']];
-  if (!menu.some(([tab])=>tab===presidentTab)) presidentTab='Resumen';
+    ? [['Resumen', '◆'], ['Socios conductores', '▦'], ['Cargos directivos', '♙'], ['Mi perfil', '♙'], ['Mis cuentas', '$'], ['Información del sindicato', '☷'], ['Mi ficha', '☷']]
+    : [['Mi perfil', '♙'], ['Mis cuentas', '$'], ['Mis vehículos', '▦'], ['Información del sindicato', '☷'], ['Mi ficha', '☷']];
+  if (!menu.some(([tab])=>tab===presidentTab)) presidentTab=menu[0][0];
   function open(tab) {
     presidentTab = tab;
     status.textContent = '';
@@ -561,6 +562,10 @@ function renderPresident(data) {
     menu
   });
   if (presidentTab === 'Mi ficha') return renderDriver(data, content);
+  if (presidentTab === 'Mi perfil' || presidentTab === 'Mis vehículos') {
+    document.body.classList.add('member-profile');
+    return renderVisualProfile(data,content,open);
+  }
   if (presidentTab === 'Información del sindicato') return renderUnionUpdates(data, content);
   if(presidentTab==='Mis cuentas') {
     const account=element('section','',content);
@@ -578,6 +583,12 @@ function renderPresident(data) {
     return;
   }
   if (presidentTab === 'Resumen') {
+    const waiting=(data.vehicleRequests||[]).filter(item=>item.status==='pending').length;
+    if(president&&waiting) {
+      const notice=element('section','',content);
+      element('h2',waiting+' cambio(s) de vehículo por revisar',notice);
+      element('button','Revisar solicitudes',notice).onclick=()=>open('Mi perfil');
+    }
     if (!president) {
       const area=element('section','',content);
       element('h2', profile[data.active.role][0],area);
