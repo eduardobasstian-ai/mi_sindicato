@@ -5,7 +5,11 @@
  const storage='misindicato.auth.v1';
  const general=new URLSearchParams(location.search).get('mode')==='admin'||location.pathname==='/admin';
  let session=JSON.parse(localStorage.getItem(storage+(general?'.admin':'.member'))||'null');
- const save=s=>{session=s;localStorage.setItem(storage+(general?'.admin':'.member'),JSON.stringify(s));};
+ const photos=new Map();
+ let photoBytes=0, refreshPending;
+ const clearPhotos=()=>{photos.clear();photoBytes=0;};
+ const save=s=>{if(!s||s.user?.id!==session?.user?.id)clearPhotos();session=s;localStorage.setItem(storage+(general?'.admin':'.member'),JSON.stringify(s));};
+ window.addEventListener('storage',event=>{if(event.key===storage+(general?'.admin':'.member')){clearPhotos();session=JSON.parse(event.newValue||'null');}});
  const fragment=new URLSearchParams(location.hash.slice(1));
  const recovery=fragment.get('type')==='recovery';
  if(fragment.get('access_token')){
@@ -19,7 +23,14 @@
    return result;
  }
  async function token(){
-  if(session&&session.expires_at*1000<Date.now()+60000)save(await auth('token?grant_type=refresh_token',{refresh_token:session.refresh_token}));
+  if(session&&session.expires_at*1000<Date.now()+60000){
+   if(!refreshPending){
+    const current=session;
+    refreshPending=auth('token?grant_type=refresh_token',{refresh_token:current.refresh_token})
+      .then(next=>{if(session===current)save(next);}).finally(()=>{refreshPending=null;});
+   }
+   await refreshPending;
+  }
   return session?.access_token;
  }
  async function edge(route,input={}){
@@ -78,10 +89,54 @@
   const elevated=await auth('factors/'+id+'/verify',{challenge_id:challenge.id,code});
   save({...session,...elevated,expires_at:Math.floor(Date.now()/1000)+(elevated.expires_in||3600)});
  }
+ async function optimizePhoto(file,kind){
+  if(!window.createImageBitmap)return file;
+  let bitmap;
+  try{
+   bitmap=await createImageBitmap(file);
+   const max=kind==='avatar'?512:1600;
+   const scale=Math.min(1,max/Math.max(bitmap.width,bitmap.height));
+   const canvas=document.createElement('canvas');
+   canvas.width=Math.max(1,Math.round(bitmap.width*scale));canvas.height=Math.max(1,Math.round(bitmap.height*scale));
+   canvas.getContext('2d').drawImage(bitmap,0,0,canvas.width,canvas.height);
+   const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/webp',.82));
+   return blob&&blob.size<file.size?blob:file;
+  }catch{return file;}finally{bitmap?.close();}
+ }
+ const imageJobs=[];
+ let runningImages=0;
+ function runImages(){
+  while(runningImages<4&&imageJobs.length){
+   const job=imageJobs.shift();
+   if(!job.image.isConnected)continue;
+   runningImages++;
+   window.CloudPortal.image(job.key,job.unionId).then(url=>{
+    if(!job.image.isConnected){URL.revokeObjectURL(url);return;}
+    job.image.onload=job.image.onerror=()=>URL.revokeObjectURL(url);
+    job.image.src=url;job.ready?.();
+   }).catch(()=>job.failed?.()).finally(()=>{runningImages--;runImages();});
+  }
+ }
+ const lazyImages=new WeakMap();
+ const imageObserver=window.IntersectionObserver?new IntersectionObserver(entries=>{
+  for(const entry of entries)if(entry.isIntersecting){
+   imageObserver.unobserve(entry.target);
+   const job=lazyImages.get(entry.target);lazyImages.delete(entry.target);
+   if(job)imageJobs.push(job);
+  }
+  runImages();
+ },{rootMargin:'160px'}):null;
  window.CloudPortal={
+  loadImage(image,key,unionId,failed,ready){
+   image.loading='lazy';image.decoding='async';
+   const job={image,key,unionId,failed,ready};
+   if(imageObserver){lazyImages.set(image,job);imageObserver.observe(image);}
+   else {imageJobs.push(job);runImages();}
+  },
   general,navigate,recovery,
   async upload(file,unionId,kind) {
     if(!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>10485760)throw new Error('Selecciona JPEG, PNG o WebP de hasta 10 MB.');
+    file=await optimizePhoto(file,kind);
     const response=await fetch('https://mi-sindicato-imagenes.eduardo-basstian.workers.dev',{
       method:'POST',headers:{Authorization:'Bearer '+await token(),'Content-Type':file.type,'X-Union-Id':unionId},body:file
     });
@@ -92,11 +147,29 @@
   },
   async images(unionId) { return edge('media/list',{unionId}); },
   async image(key,unionId) {
+    const access=await token();
+    if(!access)throw new Error('Inicia sesión.');
+    const owner=session;
+    const cacheKey=JSON.stringify([session.user?.id||access,unionId,key]);
+    let cached=photos.get(cacheKey);
+    if(cached&&cached.expires<Date.now()){photos.delete(cacheKey);photoBytes-=cached.size;cached=null;}
+    if(cached)return URL.createObjectURL(await cached.promise);
+    const entry={size:0,expires:Date.now()+60000,promise:null};
+    entry.promise=(async()=>{
     const response=await fetch('https://mi-sindicato-imagenes.eduardo-basstian.workers.dev?key='+encodeURIComponent(key),{
-      headers:{Authorization:'Bearer '+await token(),'X-Union-Id':unionId}
+      headers:{Authorization:'Bearer '+access,'X-Union-Id':unionId}
     });
     if(!response.ok)throw new Error('No se pudo cargar la imagen.');
-    return URL.createObjectURL(await response.blob());
+    const blob=await response.blob();
+    if(!session||session.user?.id!==owner.user?.id)throw new Error('La sesión cambió.');
+    if(photos.get(cacheKey)===entry){
+     entry.size=blob.size;photoBytes+=blob.size;
+     while(photos.size>24||photoBytes>24*1024*1024){const first=photos.keys().next().value;photoBytes-=photos.get(first).size;photos.delete(first);}
+    }
+    return blob;
+    })();
+    photos.set(cacheKey,entry);
+    try{return URL.createObjectURL(await entry.promise);}catch(error){if(photos.get(cacheKey)===entry){photos.delete(cacheKey);photoBytes-=entry.size;}throw error;}
   },
   async recover(email) {
     await auth('recover',{email,redirect_to:new URL('sindicato-panel.html?mode=admin',location.href).href});

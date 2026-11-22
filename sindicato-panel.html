@@ -113,8 +113,8 @@
     <p>Inicia sesión en el <a href="http://127.0.0.1:3317/">portal local</a> con tu cuenta de presidente. El portal abrirá tu panel.</p>
   </section>
 </main>
-<script src="cloud-portal.js?v=20261122-sesion"></script>
-<script src="profile-ui.js?v=1"></script>
+<script src="cloud-portal.js?v=20261122-rapido"></script>
+<script src="profile-ui.js?v=20261122-rapido"></script>
 <script>
   if (window.parent !== window && window.parent.LocalDemo) {
     document.querySelector('header img').src = 'IMG/mi-sindicato-header.png';
@@ -122,14 +122,14 @@
     note.textContent = 'Pruebas locales · Datos ficticios guardados en este navegador';
     document.querySelector('main').prepend(note);
     const script = document.createElement('script');
-    script.src = 'sindicato.js';
+    script.src = 'sindicato.js?v=20261122-rapido';
     document.body.append(script);
   } else if (location.protocol === 'file:') {
     document.querySelector('header img').src = 'IMG/mi-sindicato-header.png';
     location.replace('index.html#panel');
   } else {
     const script = document.createElement('script');
-    script.src = 'sindicato.js';
+    script.src = 'sindicato.js?v=20261122-rapido';
     document.body.append(script);
   }
 </script>

@@ -38,16 +38,19 @@ Deno.serve(async req => {
 
  // La autorización se consulta en la base con el token real.
  const scoped=createClient(Deno.env.get("SUPABASE_URL")!,Deno.env.get("SUPABASE_ANON_KEY")!,{global:{headers:{Authorization:"Bearer "+token}},auth:{persistSession:false}});
- const {data:isAdmin,error:adminError}=await scoped.rpc("portal_is_admin");
- check(adminError);
  const {route,input={}}=body;
- const {data:memberProfile}=await db.from("profiles").select("*").eq("id",user.id).maybeSingle();
- const {data:adminProfiles,error:adminProfileError}=await db.rpc("portal_admin_profile",{target:user.id});check(adminProfileError);
+ const [adminResult,profileResult,adminProfileResult,linksResult]=await Promise.all([
+  scoped.rpc("portal_is_admin"),
+  db.from("profiles").select("*").eq("id",user.id).maybeSingle(),
+  db.rpc("portal_admin_profile",{target:user.id}),
+  db.from("memberships").select("*,unions(*)").eq("user_id",user.id)
+ ]);
+ for(const result of [adminResult,profileResult,adminProfileResult,linksResult])check(result.error);
+ const isAdmin=adminResult.data,memberProfile=profileResult.data,adminProfiles=adminProfileResult.data;
  const adminProfile=adminProfiles?.[0];
  const profile=memberProfile||adminProfile;
  if(!profile?.active) return reply({error:"Cuenta inactiva."},403);
- const {data:links,error:le}=await db.from("memberships").select("*,unions(*)").eq("user_id",user.id);
- check(le);
+ const links=linksResult.data;
  const activeLinks=(links||[]).filter((m:any)=>m.active&&m.unions?.active);
  const requestedUnion=typeof input.unionId==="string"&&/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(input.unionId)
    ? input.unionId : undefined;
@@ -89,11 +92,19 @@ Deno.serve(async req => {
    const unions=unionResult.data,members=memberResult.data,drivers=driverResult.data;
    const peopleQuery=scoped.from("profiles").select("*");
    const {data:people,error:pe}=await (adminPanel?peopleQuery:peopleQuery.in("id",[...new Set([user.id,...(members||[]).map((m:any)=>m.user_id)])]));check(pe);
-   const convert=(m:any)=>{const p=people?.find((p:any)=>p.id===m.user_id);const d=drivers?.find((d:any)=>d.user_id===m.user_id&&d.union_id===m.union_id);
+   const peopleById=new Map((people||[]).map((p:any)=>[p.id,p]));
+   const driversById=new Map((drivers||[]).map((d:any)=>[d.union_id+"/"+d.user_id,d]));
+   const convert=(m:any)=>{const p:any=peopleById.get(m.user_id);const d:any=driversById.get(m.union_id+"/"+m.user_id);
     return {id:m.user_id,rut:p?.rut,name:p?.full_name,username:p?.username,email:p?.email,role:m.role,active:m.active,temporaryPassword:p?.must_change_password,
      driver:d?{nationalityType:d.nationality_type,nationality:d.nationality,address:d.address,commune:d.commune,platforms:d.platforms,vehicleModel:d.vehicle_model,vehicleYear:String(d.vehicle_year),plate:d.plate}:undefined,platforms:d?.platforms||[],shared:false};};
    if(route==="admin/panel"){
-    const byRole=Object.fromEntries(roles.map(r=>[r,(members||[]).filter((m:any)=>m.role===r).length]));
+    const byRole=Object.fromEntries(roles.map(r=>[r,0]));
+    const membersByUnion=new Map<string,any[]>();
+    for(const member of members||[]){
+     byRole[member.role]=(byRole[member.role]||0)+1;
+     if(!membersByUnion.has(member.union_id))membersByUnion.set(member.union_id,[]);
+     membersByUnion.get(member.union_id)!.push(convert(member));
+    }
     const membershipsByPerson=new Map<string,number>();
     for(const member of members||[]) membershipsByPerson.set(member.user_id,(membershipsByPerson.get(member.user_id)||0)+1);
     const {data:audit}=await scoped.from("audit_events").select("*").order("created_at",{ascending:false}).limit(15);
@@ -101,16 +112,20 @@ Deno.serve(async req => {
      memberAccounts:membershipsByPerson.size,
      singleUnionAccounts:[...membershipsByPerson.values()].filter(count=>count===1).length,
      linkedAccounts:[...membershipsByPerson.values()].filter(count=>count>1).length,
-     unions:(unions||[]).map((u:any)=>({...u,affiliations:members?.filter((m:any)=>m.union_id===u.id).length,conductors:members?.filter((m:any)=>m.union_id===u.id).length,members:members?.filter((m:any)=>m.union_id===u.id).map(convert)})),
+     unions:(unions||[]).map((u:any)=>({...u,affiliations:membersByUnion.get(u.id)?.length||0,conductors:membersByUnion.get(u.id)?.length||0,members:membersByUnion.get(u.id)||[]})),
      audit:(audit||[]).map((a:any)=>({action:a.action,union:a.details?.union,at:a.created_at,...a.details}))});
    }
    const memberships=activeLinks.map((m:any)=>({union:m.union_id,name:m.unions.name,role:m.role}));
    const active=memberships.find((m:any)=>m.union===unionId);
    const driver=convert({user_id:user.id,union_id:unionId}).driver;
-   const {data:visuals,error:visualError}=await scoped.from("member_visuals").select("*").eq("union_id",unionId).eq("user_id",user.id).maybeSingle();check(visualError);
-   const {data:vehicle,error:vehicleError}=await scoped.from("member_vehicles").select("*").eq("union_id",unionId).eq("user_id",user.id).maybeSingle();check(vehicleError);
-   const {data:requests,error:requestsError}=await scoped.from("vehicle_requests").select("*").eq("union_id",unionId).order("created_at",{ascending:false});check(requestsError);
-   const {data:updates,error:updatesError}=await scoped.from("union_updates").select("*").eq("union_id",unionId).order("created_at",{ascending:false}).limit(50);check(updatesError);
+   const extra=await Promise.all([
+    scoped.from("member_visuals").select("*").eq("union_id",unionId).eq("user_id",user.id).maybeSingle(),
+    scoped.from("member_vehicles").select("*").eq("union_id",unionId).eq("user_id",user.id).maybeSingle(),
+    scoped.from("vehicle_requests").select("*").eq("union_id",unionId).order("created_at",{ascending:false}),
+    scoped.from("union_updates").select("*").eq("union_id",unionId).order("created_at",{ascending:false}).limit(50)
+   ]);
+   for(const result of extra)check(result.error);
+   const [visuals,vehicle,requests,updates]=extra.map(result=>result.data);
    return reply({name:profile.full_name,userId:user.id,visuals,vehicle,vehicleRequests:requests||[],memberships,active,updates:updates||[],members:(members||[]).filter((m:any)=>m.union_id===unionId).map(convert),driver:{...driver,...(vehicle?{vehicleModel:vehicle.model,vehicleYear:String(vehicle.year),plate:vehicle.plate}:{}),rut:profile.rut,username:profile.username,email:profile.email}});
  }
  if(route==="vehicle/request"){

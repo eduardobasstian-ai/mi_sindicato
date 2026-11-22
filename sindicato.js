@@ -1,4 +1,22 @@
 'use strict';
+// Keep directory rendering bounded while searching the complete loaded dataset.
+function directoryPager(parent, search) {
+ let page=0;
+ const nav=element('div','',parent);nav.className='member-actions';nav.setAttribute('aria-label','Paginación');
+ const previous=element('button','Anterior',nav);previous.className='member-secondary';previous.type='button';
+ const label=element('span','',nav);label.setAttribute('role','status');
+ const next=element('button','Siguiente',nav);next.className='member-secondary';next.type='button';
+ let redraw=()=>{};
+ previous.onclick=()=>{page--;redraw();};next.onclick=()=>{page++;redraw();};
+ search.addEventListener('input',()=>{page=0;});
+ return {bind(fn){redraw=fn;},slice(items){
+  const pages=Math.max(1,Math.ceil(items.length/25));page=Math.min(page,pages-1);
+  previous.disabled=page===0;next.disabled=page===pages-1;nav.hidden=items.length<=25;
+  label.textContent='Página '+(page+1)+' de '+pages+' · '+items.length+' registros';
+  return items.slice(page*25,(page+1)*25);
+ }};
+}
+
 
 const panel = document.querySelector('#panel');
 const status = document.querySelector('#status');
@@ -230,11 +248,11 @@ function renderUnionDirectory(data, content, intro) {
   const header = element('tr', '', element('thead', '', table));
   for (const label of ['Sindicato / RUT', 'Enlace', 'Socios', 'Estado', 'Acciones']) element('th', label, header).scope = 'col';
   const rows = element('tbody', '', table);
+  const pager=directoryPager(directory,search);
   function showRows() {
     const query = search.value.trim().toLocaleLowerCase('es');
     rows.replaceChildren();
-    for (const union of data.unions) {
-      if (![union.name, union.rut, union.slug].join(' ').toLocaleLowerCase('es').includes(query)) continue;
+    for (const union of pager.slice(data.unions.filter(union => [union.name,union.rut,union.slug].join(' ').toLocaleLowerCase('es').includes(query)))) {
       const row = element('tr', '', rows);
       const identity = element('td', '', row);
       element('strong', union.name, identity);
@@ -277,6 +295,7 @@ function renderUnionDirectory(data, content, intro) {
     }
     if (!rows.children.length) element('td', 'No se encontraron sindicatos.', element('tr', '', rows)).colSpan = 5;
   }
+  pager.bind(showRows);
   search.addEventListener('input', showRows);
   showRows();
 }
@@ -518,9 +537,7 @@ function renderDriver(data, parent) {
         const image=element('img','',gallery);
         image.alt='Imagen del socio';
         image.style.cssText='width:120px;height:120px;object-fit:cover;margin:8px;border-radius:8px';
-        const url=await CloudPortal.image(item.object_key,data.active.union);
-        image.onload=()=>URL.revokeObjectURL(url);
-        image.src=url;
+        CloudPortal.loadImage(image,item.object_key,data.active.union,()=>{feedback.textContent='No se pudo cargar una imagen.';});
       }
     }
     upload.addEventListener('change',async()=>{
@@ -704,11 +721,11 @@ function renderMemberDirectory(data, content, intro) {
     element('th', label, header).scope = 'col';
   }
   const rows = element('tbody', '', table);
+  const pager=directoryPager(directory,search);
   function showRows() {
     const query = search.value.trim().toLocaleLowerCase('es');
     rows.replaceChildren();
-    for (const member of data.members) {
-      if (![member.name, member.username, member.role].join(' ').toLocaleLowerCase('es').includes(query)) continue;
+    for (const member of pager.slice(data.members.filter(member => [member.name,member.username,member.role].join(' ').toLocaleLowerCase('es').includes(query)))) {
       const row = element('tr', '', rows);
       const identity = element('td', '', row);
       element('strong', member.name, identity);
@@ -743,6 +760,7 @@ function renderMemberDirectory(data, content, intro) {
       element('td', query ? 'No se encontraron socios.' : 'Aún no hay socios registrados.', element('tr', '', rows)).colSpan = 5;
     }
   }
+  pager.bind(showRows);
   search.addEventListener('input', showRows);
   showRows();
   add.addEventListener('click', () => openMemberDialog(content, add));
