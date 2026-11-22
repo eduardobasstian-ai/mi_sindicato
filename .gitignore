@@ -3,3 +3,5 @@ sindicatos.local.json
 sindicatos.local.json.tmp
 sindicatos.local.json.sessions
 sindicatos.local.json.sessions.tmp
+
+.playwright-mcp/

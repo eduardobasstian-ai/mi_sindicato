@@ -37,3 +37,5 @@ cloudflare/images-worker.js contiene el servicio de imágenes privadas con lími
 
 Sitio publicado: https://eduardobasstian-ai.github.io/mi_sindicato/
 Admin: https://eduardobasstian-ai.github.io/mi_sindicato/sindicato-panel.html?mode=admin
+
+En la activación inicial de Admin, después de recuperar la contraseña y vincular el autenticador, puede solicitarse el cambio obligatorio pendiente. Usa la contraseña recién establecida como clave actual y elige una diferente para completar ese paso.
