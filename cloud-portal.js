@@ -38,10 +38,33 @@
    if(factor)await auth('factors/'+factor.id,null,'DELETE');
    const enrolled=await auth('factors',{factor_type:'totp',friendly_name:'Admin Mi Sindicato'});
    const dialog=document.createElement('dialog');
-   dialog.style.cssText='max-width:440px;background:#191b22;color:white;border-radius:16px;padding:24px';
+   dialog.style.cssText='width:min(440px,calc(100% - 24px));max-height:90vh;overflow:auto;box-sizing:border-box;background:#191b22;color:white;border-radius:16px;padding:24px';
    const text=document.createElement('p');text.textContent='Agrega esta cuenta a Google Authenticator y escribe el código de seis dígitos.';dialog.append(text);
-   const image=document.createElement('img');image.src=enrolled.totp.qr_code.startsWith('data:')?enrolled.totp.qr_code:'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(enrolled.totp.qr_code);image.style.width='220px';dialog.append(image);
-   const field=document.createElement('input');field.placeholder='Código de 6 dígitos';field.inputMode='numeric';dialog.append(field);
+   const image=document.createElement('img');
+   image.alt='Código QR para Google Authenticator';
+   image.src=enrolled.totp.qr_code.startsWith('data:')?enrolled.totp.qr_code:'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(enrolled.totp.qr_code);
+   image.style.cssText='display:block;width:100%;max-width:300px;height:auto;box-sizing:border-box;padding:20px;margin:16px auto;background:white;border-radius:8px';
+   dialog.append(image);
+   const manual=document.createElement('details');
+   const summary=document.createElement('summary');summary.textContent='¿No puedes escanear? Ingresar clave manualmente';manual.append(summary);
+   const instructions=document.createElement('p');
+   instructions.textContent='En Google Authenticator pulsa + → Ingresar clave de configuración. Nombre: Admin Mi Sindicato. Tipo: Basada en tiempo. Introduce esta clave:';
+   manual.append(instructions);
+   const secret=document.createElement('input');
+   secret.readOnly=true;
+   secret.value=enrolled.totp.secret;
+   secret.setAttribute('aria-label','Clave de configuración del autenticador');
+   secret.style.cssText='width:100%;box-sizing:border-box;font-family:monospace';
+   secret.addEventListener('click',()=>secret.select());
+   manual.append(secret);
+   const copy=document.createElement('button');
+   copy.type='button';copy.textContent='Copiar clave';
+   copy.onclick=async()=>{
+    try{await navigator.clipboard.writeText(secret.value);copy.textContent='Clave copiada';}
+    catch{secret.focus();secret.select();copy.textContent='Presiona Ctrl+C para copiar';}
+   };
+   manual.append(copy);dialog.append(manual);
+   const field=document.createElement('input');field.placeholder='Código de 6 dígitos';field.inputMode='numeric';field.maxLength=6;field.autocomplete='one-time-code';field.setAttribute('aria-label','Código de seis dígitos de Google Authenticator');dialog.append(field);
    const button=document.createElement('button');button.textContent='Activar autenticador';dialog.append(button);
    const error=document.createElement('p');dialog.append(error);document.body.append(dialog);dialog.showModal();
    await new Promise((resolve,reject)=>{
