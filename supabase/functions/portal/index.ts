@@ -64,9 +64,13 @@ Deno.serve(async req => {
      driver:d?{nationalityType:d.nationality_type,nationality:d.nationality,address:d.address,commune:d.commune,platforms:d.platforms,vehicleModel:d.vehicle_model,vehicleYear:String(d.vehicle_year),plate:d.plate}:undefined,platforms:d?.platforms||[],shared:false};};
    if(route==="admin/panel"){
     const byRole=Object.fromEntries(roles.map(r=>[r,(members||[]).filter((m:any)=>m.role===r).length]));
+    const membershipsByPerson=new Map<string,number>();
+    for(const member of members||[]) membershipsByPerson.set(member.user_id,(membershipsByPerson.get(member.user_id)||0)+1);
     const {data:audit}=await scoped.from("audit_events").select("*").order("created_at",{ascending:false}).limit(15);
     return reply({general:true,adminName:profile.full_name,accounts:people?.length,affiliations:members?.length,byRole,
-     linkedAccounts:(people||[]).filter((p:any)=>(members||[]).filter((m:any)=>m.user_id===p.id).length>1).length,
+     memberAccounts:membershipsByPerson.size,
+     singleUnionAccounts:[...membershipsByPerson.values()].filter(count=>count===1).length,
+     linkedAccounts:[...membershipsByPerson.values()].filter(count=>count>1).length,
      unions:(unions||[]).map((u:any)=>({...u,affiliations:members?.filter((m:any)=>m.union_id===u.id).length,conductors:members?.filter((m:any)=>m.union_id===u.id).length,members:members?.filter((m:any)=>m.union_id===u.id).map(convert)})),
      audit:(audit||[]).map((a:any)=>({action:a.action,union:a.details?.union,at:a.created_at,...a.details}))});
    }

@@ -185,6 +185,8 @@ function panel(session) {
     return {
       general: true, adminName, unions: [...countsByUnion.values()],
       accounts: data.people.length, affiliations: data.links.length, byRole,
+      memberAccounts: byPerson.size,
+      singleUnionAccounts: [...byPerson.values()].filter(count => count === 1).length,
       linkedAccounts: [...byPerson.values()].filter(count => count > 1).length,
       audit: data.audit.slice(-15).reverse()
     };

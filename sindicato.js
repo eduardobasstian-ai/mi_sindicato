@@ -361,7 +361,7 @@ function renderAdmin(data) {
       ['Sindicatos habilitados', data.unions.filter(union => union.active !== false).length],
       ['Cuentas registradas', data.accounts],
       ['Afiliaciones', data.affiliations],
-      ['Socios conductores', data.accounts],
+      ['Socios conductores', data.memberAccounts],
       ['Cuentas vinculadas', data.linkedAccounts]
     ]) {
       const card = element('article', '', metrics);
@@ -377,7 +377,7 @@ function renderAdmin(data) {
     chart(charts, 'Afiliaciones por cargo principal', Object.entries(data.byRole));
     chart(charts, 'Socios conductores por sindicato', data.unions.map(union => [union.name, union.conductors]));
     chart(charts, 'Cuentas por tipo de afiliación', [
-      ['Un sindicato', data.accounts - data.linkedAccounts], ['Dos sindicatos', data.linkedAccounts]
+      ['Un sindicato', data.singleUnionAccounts], ['Dos sindicatos', data.linkedAccounts]
     ]);
   } else if (adminTab === 'Sindicatos') {
     renderUnionDirectory(data, content, intro);
