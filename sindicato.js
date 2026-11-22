@@ -465,8 +465,8 @@ function render(data) {
     return;
   }
 
-  document.body.classList.toggle('admin-dashboard', data.active?.role === 'Presidente');
-  if (data.active?.role !== 'Presidente') {
+  document.body.classList.toggle('admin-dashboard', Boolean(data.active));
+  if (!data.active) {
     const header = logout.closest('header');
     const brand = header.querySelector('.admin-brand');
     const session = header.querySelector('.admin-session');
@@ -476,7 +476,6 @@ function render(data) {
       session.remove();
     }
   }
-  if (data.active?.role !== 'Presidente') element('h1', 'Hola, ' + data.name, panel);
   if (data.memberships.length > 1) {
     const switcher = form('Tu cuenta tiene dos sindicatos vinculados', 'Abrir sindicato', 'select');
     switcher.node.classList.add('union-switcher');
@@ -487,14 +486,7 @@ function render(data) {
     switcher.finish();
   }
   if (!data.active) return;
-  if (data.active.role === 'Presidente') return renderPresident(data);
-  renderDriver(data, panel);
-  if (data.active.role === 'Socio conductor') return;
-  const area = element('section', '', panel);
-  element('h2', data.active.role, area);
-  const [title, description] = profile[data.active.role];
-  element('h3', title, area);
-  element('p', description, area);
+  return renderPresident(data);
 }
 
 function renderDriver(data, parent) {
@@ -551,6 +543,12 @@ function renderDriver(data, parent) {
 let presidentTab = 'Resumen';
 
 function renderPresident(data) {
+  const president = data.active.role === 'Presidente';
+  const director = data.active.role !== 'Socio conductor';
+  const menu = president
+    ? [['Resumen', '◆'], ['Socios conductores', '▦'], ['Cargos directivos', '♙'], ['Información del sindicato', '☷'], ['Mi ficha', '☷']]
+    : [['Resumen', '◆'], ['Mis cuentas', '$'], ['Mis vehículos', '▦'], ['Información del sindicato', '☷'], ['Mi ficha', '☷']];
+  if (!menu.some(([tab])=>tab===presidentTab)) presidentTab='Resumen';
   function open(tab) {
     presidentTab = tab;
     status.textContent = '';
@@ -558,12 +556,47 @@ function renderPresident(data) {
     panel.querySelector('h1').focus();
   }
   const { content, intro, headings } = dashboard({
-    title: 'Panel de Presidencia', subtitle: data.active.name, username: data.name,
-    selected: presidentTab, open, eyebrow: 'Administración del sindicato',
-    menu: [['Resumen', '◆'], ['Socios conductores', '▦'], ['Cargos directivos', '♙'], ['Mi ficha', '☷']]
+    title: president ? 'Panel de Presidencia' : profile[data.active.role][0], subtitle: data.active.name, username: data.name,
+    selected: presidentTab, open, eyebrow: director ? 'Gestión del sindicato' : 'Socio conductor',
+    menu
   });
   if (presidentTab === 'Mi ficha') return renderDriver(data, content);
+  if (presidentTab === 'Información del sindicato') return renderUnionUpdates(data, content);
+  if(presidentTab==='Mis cuentas') {
+    const account=element('section','',content);
+    element('h2','Estado de mis cuentas',account);
+    element('p','El registro de cuotas, ingresos, egresos y comprobantes está pendiente de configuración.',account);
+    return;
+  }
+  if(presidentTab==='Mis vehículos') {
+    const vehicles=element('section','',content);
+    element('h2','Mi vehículo registrado',vehicles);
+    element('p',data.driver?.vehicleModel||'Sin vehículo registrado',vehicles);
+    if(data.driver?.plate)element('p','Patente · '+data.driver.plate,vehicles);
+    if(data.driver?.vehicleYear)element('p','Año · '+data.driver.vehicleYear,vehicles);
+    element('p','Próximamente podrás actualizar los datos y registrar varios vehículos.',vehicles);
+    return;
+  }
   if (presidentTab === 'Resumen') {
+    if (!president) {
+      const area=element('section','',content);
+      element('h2', profile[data.active.role][0],area);
+      element('p',data.name+' · '+data.active.name,area);
+      const cards=element('div','',area);
+      cards.className='admin-charts';
+      for(const [label,value] of [
+        ['Afiliación','Activa'],['Cargo',data.active.role],
+        ['Vehículo',data.driver?.vehicleModel||'Sin registrar'],
+        ['Patente',data.driver?.plate||'Sin registrar'],
+        ['Cuotas','Pendiente de configuración']
+      ]) {
+        const card=element('article','',cards);card.className='admin-card';
+        element('h3',label,card);element('p',value,card);
+      }
+      element('p','También tienes habilitado tu perfil de socio conductor en Mi ficha.',area);
+      element('button','Ver información del sindicato',area).addEventListener('click',()=>open('Información del sindicato'));
+      return;
+    }
     element('p', 'Consulta la composición de tu sindicato.', headings);
     element('button', 'Gestionar socios', intro).addEventListener('click', () => open('Socios conductores'));
     const metrics = element('div', '', content);
@@ -588,11 +621,47 @@ function renderPresident(data) {
   }
   const list = element('section', '', content);
   const officers = presidentTab === 'Cargos directivos';
+  if(officers) {
+    const eligible=data.members.filter(member=>member.role!=='Presidente'&&member.active!==false);
+    if(eligible.length) {
+      const assign=form('Asignar o cambiar cargo','Guardar cargo','members/role',render,content);
+      select(assign.node,'Socio conductor','person',eligible.map(member=>[member.id,member.name+' · '+member.role]));
+      select(assign.node,'Cargo adicional','role',[
+        ['Socio conductor','Sin cargo adicional'],['Tesorero','Tesorero/a'],['Secretario','Secretario/a'],['Revisor de cuentas','Revisor/a de cuentas']
+      ]);
+      const updateRole=()=>{assign.node.elements.role.value=eligible.find(member=>member.id===assign.node.elements.person.value).role;};
+      assign.node.elements.person.addEventListener('change',updateRole);
+      updateRole();
+      element('p','La persona conserva su cuenta y su perfil de socio conductor. El cambio de presidencia lo gestiona Admin Mi Sindicato.',assign.node);
+      assign.finish();
+    }
+  }
   element('h2', officers ? 'Titulares de cargos' : 'Socios registrados', list);
   for (const member of data.members) {
     if (!officers || member.role !== 'Socio conductor') {
       element('p', member.name + ' · ' + member.role, list);
     }
+  }
+}
+
+function renderUnionUpdates(data,content) {
+  if(data.active.role!=='Socio conductor') {
+    const publish=form('Compartir información de '+data.active.role,'Publicar para los socios','updates',render,content);
+    input(publish.node,'Título','title',{maxLength:160});
+    const body=element('textarea','',element('label','Informe, actividad o comunicado',publish.node));
+    Object.assign(body,{name:'body',required:true,maxLength:10000,rows:6});
+    element('p','Esta publicación será visible para todos los socios de tu sindicato.',publish.node);
+    publish.finish();
+  }
+  const feed=element('section','',content);
+  element('h2','Información compartida por la directiva',feed);
+  if(!data.updates?.length)element('p','Aún no hay publicaciones.',feed);
+  for(const update of data.updates||[]) {
+    const entry=element('article','',feed);
+    entry.className='admin-card';
+    element('h3',update.title,entry);
+    element('small',update.author_name+' · '+update.author_role+' · '+new Date(update.created_at).toLocaleString('es-CL'),entry);
+    element('p',update.body,entry).style.whiteSpace='pre-wrap';
   }
 }
 

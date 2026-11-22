@@ -77,7 +77,18 @@ Deno.serve(async req => {
    const memberships=activeLinks.map((m:any)=>({union:m.union_id,name:m.unions.name,role:m.role}));
    const active=memberships.find((m:any)=>m.union===unionId);
    const driver=convert({user_id:user.id,union_id:unionId}).driver;
-   return reply({name:profile.full_name,memberships,active,members:(members||[]).filter((m:any)=>m.union_id===unionId).map(convert),driver:{...driver,rut:profile.rut,username:profile.username,email:profile.email}});
+   const {data:updates,error:updatesError}=await scoped.from("union_updates").select("*").eq("union_id",unionId).order("created_at",{ascending:false});check(updatesError);
+   return reply({name:profile.full_name,memberships,active,updates:updates||[],members:(members||[]).filter((m:any)=>m.union_id===unionId).map(convert),driver:{...driver,rut:profile.rut,username:profile.username,email:profile.email}});
+ }
+ if(route==="members/role"){
+   if(!president)throw new Error("Solo el presidente puede asignar cargos.");
+   const {error}=await db.rpc("portal_assign_office",{target_union:unionId,target_user:input.person,new_role:input.role,actor:user.id});check(error);
+   return reply({});
+ }
+ if(route==="updates"){
+   if(!own||!roles.slice(0,-1).includes(own.role))throw new Error("Solo la directiva puede publicar información.");
+   const {error}=await db.from("union_updates").insert({union_id:unionId,author_id:user.id,author_name:profile.full_name,author_role:own.role,title:String(input.title||"").trim(),body:String(input.body||"").trim()});check(error);
+   return reply({});
  }
  if(route==="media/record"||route==="media/list"){
    if(!own)throw new Error("Acceso denegado.");

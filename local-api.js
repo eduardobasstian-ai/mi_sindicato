@@ -154,7 +154,8 @@ function panel(session) {
         shared: data.links.some(other => other.person === member.id && other.union !== link.union),
         platforms: link.driver?.platforms || [], temporaryPassword: Boolean(member.temporaryPassword) };
     }) : [];
-  return { name: person.name, memberships, active, members, driver: {
+  return { name: person.name, memberships, active, members,
+    updates: (data.updates || []).filter(update=>update.union_id===session.union).slice().reverse(), driver: {
     rut: person.id, username: person.username, email: person.email, ...active?.driver
   } };
 }
@@ -247,7 +248,17 @@ async function api(req, res, route) {
 
   const next = structuredClone(data);
   let resetPerson;
-  if (route === '/api/admin/unions/delete' && session.general) {
+  if (route === '/api/members/role' && membership(session)?.role === 'Presidente') {
+    const member=next.links.find(link=>link.union===session.union&&link.person===input.person&&link.active!==false&&link.role!=='Presidente');
+    if(!member||!roles.slice(1).includes(input.role))fail(400,'Selecciona un socio activo y un cargo válido.');
+    member.role=input.role;
+    next.audit.push({action:'Asignación de cargo',union:next.unions.find(union=>union.id===session.union).name,at:new Date().toISOString()});
+  } else if(route === '/api/updates' && roles.slice(0,-1).includes(membership(session)?.role)) {
+    next.updates ||= [];
+    next.updates.push({id:crypto.randomUUID(),union_id:session.union,author_id:session.id,
+      author_name:next.people.find(person=>person.id===session.id).name,author_role:membership(session).role,
+      title:field(input.title,'título',160),body:field(input.body,'contenido',10000),created_at:new Date().toISOString()});
+  } else if (route === '/api/admin/unions/delete' && session.general) {
     const union = next.unions.find(item => item.id === input.id);
     if (!union) fail(404, 'Sindicato no encontrado.');
     const affected = new Set(next.links.filter(link => link.union === union.id).map(link => link.person));
