@@ -36,14 +36,14 @@
   if(!factor){
    factor=user.factors?.find(f=>f.factor_type==='totp'&&f.status==='unverified');
    if(factor)await auth('factors/'+factor.id,null,'DELETE');
-   const enrolled=await auth('factors',{factor_type:'totp',friendly_name:'Admin Mi Sindicato'});
+   const enrolled=await auth('factors',{factor_type:'totp',friendly_name:'Admin Mi Sindicato',issuer:'Mi Sindicato'});
    const dialog=document.createElement('dialog');
    dialog.style.cssText='width:min(440px,calc(100% - 24px));max-height:90vh;overflow:auto;box-sizing:border-box;background:#191b22;color:white;border-radius:16px;padding:24px';
    const text=document.createElement('p');text.textContent='Agrega esta cuenta a Google Authenticator y escribe el código de seis dígitos.';dialog.append(text);
    const image=document.createElement('img');
    image.alt='Código QR para Google Authenticator';
    image.src=enrolled.totp.qr_code.startsWith('data:')?enrolled.totp.qr_code:'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(enrolled.totp.qr_code);
-   image.style.cssText='display:block;width:100%;max-width:300px;height:auto;box-sizing:border-box;padding:20px;margin:16px auto;background:white;border-radius:8px';
+   image.style.cssText='display:block;width:100%;max-width:340px;height:auto;box-sizing:border-box;padding:24px;margin:16px auto;background:white;border-radius:8px;image-rendering:pixelated';
    dialog.append(image);
    const manual=document.createElement('details');
    const summary=document.createElement('summary');summary.textContent='¿No puedes escanear? Ingresar clave manualmente';manual.append(summary);
