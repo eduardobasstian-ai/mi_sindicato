@@ -7,7 +7,10 @@ function renderVisualProfile(data, content, open) {
   const frame=element('div','',parent);frame.className=kind==='avatar'?'profile-avatar':'profile-car-photo';
   const image=element('img','',frame);image.alt=kind==='avatar'?'Foto de perfil':'Foto del vehículo';image.loading='lazy';image.decoding='async';
   image.hidden=true;
-  const placeholder=element('span',kind==='avatar'?'♙':'🚘',frame);placeholder.className='profile-photo-placeholder';
+  const placeholder=element('span','',frame);placeholder.className='profile-photo-placeholder';
+  placeholder.innerHTML=kind==='avatar'
+    ? '<svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 22v-2a8 8 0 0 1 16 0v2"/></svg>'
+    : '<svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m4 10 2-6h12l2 6M3 10h18v9H3zM5 19v3m14-3v3M6 14h3m6 0h3"/></svg>';
   if(key&&!local)CloudPortal.image(key,data.active.union).then(url=>{image.onload=()=>URL.revokeObjectURL(url);image.src=url;image.hidden=false;placeholder.hidden=true;}).catch(()=>{});
   const label=element('label','📷',frame);label.className='profile-photo-edit';label.title=kind==='avatar'?'Cambiar foto de perfil':'Cambiar foto del vehículo';
   const upload=element('input','',label);upload.type='file';upload.accept='image/jpeg,image/png,image/webp';upload.setAttribute('aria-label',label.title);

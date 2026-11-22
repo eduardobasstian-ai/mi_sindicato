@@ -13,6 +13,7 @@ const attempts = new Map();
 const files = new Map([
   ['/', 'index.html'], ['/index.html', 'index.html'], ['/panel', 'sindicato-panel.html'],
   ['/admin', 'sindicato-panel.html'], ['/sindicato.js', 'sindicato.js'],
+  ['/cloud-portal.js', 'cloud-portal.js'], ['/profile-ui.js', 'profile-ui.js'], ['/profile-ui.css', 'profile-ui.css'],
   ...['mi-sindicato-header.png', 'mi-sindicato-favicon.png', 'mi-sindicato-road.svg'].map(name => ['/IMG/' + name, 'IMG/' + name])
 ]);
 let data = fs.existsSync(dataFile) ? JSON.parse(fs.readFileSync(dataFile, 'utf8')) :
@@ -454,7 +455,7 @@ http.createServer(async (req, res) => {
     const slug = route.replace(/^\//, '').replace(/\/$/, '');
     const file = files.get(route) || (data.unions.some(union => union.slug === slug && union.active !== false) ? 'index.html' : null);
     if (!file || req.method !== 'GET') fail(404, 'Página no disponible.');
-    const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png' };
+    const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png' };
     const content = fs.readFileSync(path.join(__dirname, file));
     res.writeHead(200, { 'Content-Type': types[path.extname(file)] });
     res.end(content);
